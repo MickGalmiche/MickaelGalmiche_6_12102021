@@ -31,7 +31,7 @@ exports.login = (req, res, next) => {
                         userId: user.id,
                         token: jsonToken.sign(
                             { userId: user.id },
-                            'RANDOM_TOKEN_SECRET',
+                            process.env.TOKEN_KEY,
                             { expiresIn: '24h' }
                         )
                     });

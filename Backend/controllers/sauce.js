@@ -7,9 +7,20 @@ exports.createSauce = (req, res, next) => {
         ...sauceObject,
         imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
     });
-    sauce.save()
-        .then(() => res.status(201).json({ message: 'Sauce ajoutée !'}))
-        .catch(error => res.status(400).json({ error }));
+    try {
+        if (sauceObject.userId == req.token.userId) {
+            sauce.save()
+                .then(() => res.status(201).json({ message: 'Sauce ajoutée !'}))
+                .catch(error => res.status(400).json({ error }));
+        } else {
+            throw 'Invalid user ID';
+        }
+    } catch (error) {
+        if (req.file) {
+            fs.unlinkSync(`images/${req.file.filename}`);
+        }
+        res.status(403).json({ error });
+    }
 };
 
 exports.getOneSauce = (req, res, next) => {
@@ -23,22 +34,51 @@ exports.modifySauce = (req, res, next) => {
         ...JSON.parse(req.body.sauce),
         imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
     } : { ...req.body };
-    Sauce.updateOne({_id: req.params.id}, { ...sauceObject, _id: req.params.id})
-        .then(() => res.status(201).json({ message: 'Sauce mise à jour !'}))
-        .catch(error => res.status(400).json({ error }));
+    try {
+        if (sauceObject.userId == req.token.userId) {
+
+            if (req.file) {
+                Sauce.findOne({ _id: req.params.id })
+                    .then(oldSauce => {
+                        const filename = oldSauce.imageUrl.split('/images/')[1];
+                        fs.unlinkSync(`images/${filename}`);
+                    })
+                    .catch (error => res.status(400).json({ error }));
+            }
+
+            Sauce.updateOne({_id: req.params.id}, { ...sauceObject, _id: req.params.id})
+                .then(() => res.status(201).json({ message: 'Sauce mise à jour !'}))
+                .catch(error => res.status(400).json({ error }));
+        } else {
+            throw 'Invalid user ID';
+        }
+    } catch (error) {
+        if (req.file) {
+            fs.unlinkSync(`images/${req.file.filename}`);
+        }
+        res.status(403).json({ error });
+    }
 };
 
 exports.deleteSauce = (req, res, next) => {
     Sauce.findOne({ _id: req.params.id })
         .then(sauce => {
-            const filename = sauce.imageUrl.split('/images/')[1];
-            fs.unlink(`images/${filename}`, () => {
-                Sauce.deleteOne({ _id: req.params.id})
-                    .then(() => res.status(200).json({ message: 'Sauce supprimée !'}))
-                    .catch(error => res.status(400).json({ error }));
-            })
+            try {
+                if (sauce.userId == req.token.userId) {
+                    const filename = sauce.imageUrl.split('/images/')[1];
+                    fs.unlink(`images/${filename}`, () => {
+                        Sauce.deleteOne({ _id: req.params.id})
+                            .then(() => res.status(200).json({ message: 'Sauce supprimée !'}))
+                            .catch(error => res.status(400).json({ error }));
+                    })
+                } else {
+                    throw 'Invalid user ID';
+                }
+            } catch (error) {
+                res.status(403).json({ error });
+            }
         })
-        .catch(error => res.status(500).json({ error }));
+        .catch(error => res.status(400).json({ error }));
 };
 
 exports.manageRating = (req, res, next) => {
@@ -106,5 +146,5 @@ exports.manageRating = (req, res, next) => {
 exports.getAllSauce = (req, res, next) => {
     Sauce.find()
         .then(things => res.status(200).json(things))
-        .catch(error => res.status(400).json({ error })); 
+        .catch(error => res.status(404).json({ error })); 
 };
